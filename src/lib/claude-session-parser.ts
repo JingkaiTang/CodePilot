@@ -12,10 +12,10 @@
  * Messages are threaded via parentUuid → uuid chains.
  */
 
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
-import type { MessageContentBlock } from '@/types';
+import fs from "fs";
+import path from "path";
+import os from "os";
+import type { MessageContentBlock } from "@/types";
 
 // ==========================================
 // Constants
@@ -56,7 +56,7 @@ export interface ClaudeSessionInfo {
 }
 
 export interface ParsedMessage {
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   /** Plain text content for display */
   content: string;
   /** Structured content blocks (for assistant messages with tool usage) */
@@ -81,14 +81,14 @@ interface JournalEntry {
 }
 
 interface UserEntry extends JournalEntry {
-  type: 'user';
+  type: "user";
   parentUuid: string | null;
   cwd: string;
   sessionId: string;
   version: string;
   gitBranch: string;
   message: {
-    role: 'user';
+    role: "user";
     content: string | ContentBlock[];
   };
   uuid: string;
@@ -96,7 +96,7 @@ interface UserEntry extends JournalEntry {
 }
 
 interface AssistantEntry extends JournalEntry {
-  type: 'assistant';
+  type: "assistant";
   parentUuid: string;
   cwd: string;
   sessionId: string;
@@ -104,7 +104,7 @@ interface AssistantEntry extends JournalEntry {
     content: ContentBlock[];
     id?: string;
     model?: string;
-    role: 'assistant';
+    role: "assistant";
     stop_reason?: string;
     usage?: {
       input_tokens: number;
@@ -136,7 +136,8 @@ interface ContentBlock {
  * Get the Claude Code projects directory.
  */
 export function getClaudeProjectsDir(): string {
-  return path.join(os.homedir(), '.claude', 'projects');
+  const { getClaudeProjectsDir: getDir } = require("./cli-config");
+  return getDir();
 }
 
 /**
@@ -151,10 +152,10 @@ export function getClaudeProjectsDir(): string {
  * this function is only used as a fallback for display purposes.
  */
 export function decodeProjectPath(encodedName: string): string {
-  if (!encodedName.startsWith('-')) {
+  if (!encodedName.startsWith("-")) {
     return encodedName;
   }
-  return encodedName.replace(/^-/, '/').replace(/-/g, '/');
+  return encodedName.replace(/^-/, "/").replace(/-/g, "/");
 }
 
 /**
@@ -181,11 +182,11 @@ export function listClaudeSessions(): ClaudeSessionInfo[] {
 
       try {
         const files = fs.readdirSync(projectPath);
-        const jsonlFiles = files.filter(f => f.endsWith('.jsonl'));
+        const jsonlFiles = files.filter((f) => f.endsWith(".jsonl"));
 
         for (const jsonlFile of jsonlFiles) {
           const filePath = path.join(projectPath, jsonlFile);
-          const sessionId = jsonlFile.replace('.jsonl', '');
+          const sessionId = jsonlFile.replace(".jsonl", "");
 
           try {
             const info = extractSessionInfo(filePath, sessionId, decodedPath);
@@ -205,7 +206,9 @@ export function listClaudeSessions(): ClaudeSessionInfo[] {
   }
 
   // Sort by most recent first
-  sessions.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  sessions.sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  );
 
   return sessions;
 }
@@ -214,14 +217,18 @@ export function listClaudeSessions(): ClaudeSessionInfo[] {
  * Read and split a JSONL file into lines, with size guard.
  * Returns null if the file exceeds MAX_FILE_SIZE.
  */
-function readJsonlLines(filePath: string): { lines: string[]; stat: fs.Stats } | null {
+function readJsonlLines(
+  filePath: string,
+): { lines: string[]; stat: fs.Stats } | null {
   const stat = fs.statSync(filePath);
   if (stat.size > MAX_FILE_SIZE) {
-    console.warn(`[claude-session-parser] Skipping ${filePath}: file too large (${(stat.size / 1024 / 1024).toFixed(1)} MB)`);
+    console.warn(
+      `[claude-session-parser] Skipping ${filePath}: file too large (${(stat.size / 1024 / 1024).toFixed(1)} MB)`,
+    );
     return null;
   }
-  const content = fs.readFileSync(filePath, 'utf-8');
-  const lines = content.split('\n').filter(l => l.trim());
+  const content = fs.readFileSync(filePath, "utf-8");
+  const lines = content.split("\n").filter((l) => l.trim());
   return { lines, stat };
 }
 
@@ -239,12 +246,12 @@ function extractSessionInfo(
 
   if (lines.length === 0) return null;
 
-  let cwd = '';
-  let gitBranch = '';
-  let version = '';
-  let preview = '';
-  let createdAt = '';
-  let updatedAt = '';
+  let cwd = "";
+  let gitBranch = "";
+  let version = "";
+  let preview = "";
+  let createdAt = "";
+  let updatedAt = "";
   let userMessageCount = 0;
   let assistantMessageCount = 0;
 
@@ -257,7 +264,7 @@ function extractSessionInfo(
         updatedAt = entry.timestamp as string;
       }
 
-      if (entry.type === 'user') {
+      if (entry.type === "user") {
         const userEntry = entry as UserEntry;
         userMessageCount++;
 
@@ -267,16 +274,16 @@ function extractSessionInfo(
 
         if (!preview && userEntry.message?.content) {
           const msgContent = userEntry.message.content;
-          if (typeof msgContent === 'string') {
+          if (typeof msgContent === "string") {
             preview = msgContent.slice(0, 120);
           } else if (Array.isArray(msgContent)) {
-            const textBlock = msgContent.find(b => b.type === 'text');
+            const textBlock = msgContent.find((b) => b.type === "text");
             if (textBlock?.text) {
               preview = textBlock.text.slice(0, 120);
             }
           }
         }
-      } else if (entry.type === 'assistant') {
+      } else if (entry.type === "assistant") {
         assistantMessageCount++;
       }
     } catch {
@@ -297,9 +304,9 @@ function extractSessionInfo(
     projectPath: effectivePath,
     projectName: path.basename(effectivePath),
     cwd: effectivePath,
-    gitBranch: gitBranch || '',
-    version: version || '',
-    preview: preview || '(no preview)',
+    gitBranch: gitBranch || "",
+    version: version || "",
+    preview: preview || "(no preview)",
     userMessageCount,
     assistantMessageCount,
     createdAt: createdAt || stat.birthtime.toISOString(),
@@ -323,7 +330,7 @@ export function parseClaudeSession(sessionId: string): ParsedSession | null {
 
   // Find the session file across all project directories
   let filePath: string | null = null;
-  let projectPath = '';
+  let projectPath = "";
 
   try {
     const projectDirs = fs.readdirSync(projectsDir, { withFileTypes: true });
@@ -331,7 +338,11 @@ export function parseClaudeSession(sessionId: string): ParsedSession | null {
     for (const projectDir of projectDirs) {
       if (!projectDir.isDirectory()) continue;
 
-      const candidate = path.join(projectsDir, projectDir.name, `${sessionId}.jsonl`);
+      const candidate = path.join(
+        projectsDir,
+        projectDir.name,
+        `${sessionId}.jsonl`,
+      );
       if (fs.existsSync(candidate)) {
         filePath = candidate;
         projectPath = decodeProjectPath(projectDir.name);
@@ -352,12 +363,12 @@ export function parseClaudeSession(sessionId: string): ParsedSession | null {
 
   // Single pass: extract both metadata and messages
   const messages: ParsedMessage[] = [];
-  let cwd = '';
-  let gitBranch = '';
-  let version = '';
-  let preview = '';
-  let createdAt = '';
-  let updatedAt = '';
+  let cwd = "";
+  let gitBranch = "";
+  let version = "";
+  let preview = "";
+  let createdAt = "";
+  let updatedAt = "";
   let userMessageCount = 0;
   let assistantMessageCount = 0;
 
@@ -370,7 +381,7 @@ export function parseClaudeSession(sessionId: string): ParsedSession | null {
         updatedAt = entry.timestamp as string;
       }
 
-      if (entry.type === 'user') {
+      if (entry.type === "user") {
         const userEntry = entry as UserEntry;
         userMessageCount++;
 
@@ -380,10 +391,10 @@ export function parseClaudeSession(sessionId: string): ParsedSession | null {
 
         if (!preview && userEntry.message?.content) {
           const msgContent = userEntry.message.content;
-          if (typeof msgContent === 'string') {
+          if (typeof msgContent === "string") {
             preview = msgContent.slice(0, 120);
           } else if (Array.isArray(msgContent)) {
-            const textBlock = msgContent.find(b => b.type === 'text');
+            const textBlock = msgContent.find((b) => b.type === "text");
             if (textBlock?.text) {
               preview = textBlock.text.slice(0, 120);
             }
@@ -392,7 +403,7 @@ export function parseClaudeSession(sessionId: string): ParsedSession | null {
 
         const parsed = parseUserMessage(userEntry);
         if (parsed) messages.push(parsed);
-      } else if (entry.type === 'assistant') {
+      } else if (entry.type === "assistant") {
         assistantMessageCount++;
 
         const assistantEntry = entry as AssistantEntry;
@@ -416,9 +427,9 @@ export function parseClaudeSession(sessionId: string): ParsedSession | null {
     projectPath: effectivePath,
     projectName: path.basename(effectivePath),
     cwd: effectivePath,
-    gitBranch: gitBranch || '',
-    version: version || '',
-    preview: preview || '(no preview)',
+    gitBranch: gitBranch || "",
+    version: version || "",
+    preview: preview || "(no preview)",
     userMessageCount,
     assistantMessageCount,
     createdAt: createdAt || stat.birthtime.toISOString(),
@@ -437,14 +448,14 @@ function parseUserMessage(entry: UserEntry): ParsedMessage | null {
   if (!msgContent) return null;
 
   let text: string;
-  if (typeof msgContent === 'string') {
+  if (typeof msgContent === "string") {
     text = msgContent;
   } else if (Array.isArray(msgContent)) {
     // User messages can have structured content (e.g., with images)
     text = msgContent
-      .filter(b => b.type === 'text')
-      .map(b => b.text || '')
-      .join('\n');
+      .filter((b) => b.type === "text")
+      .map((b) => b.text || "")
+      .join("\n");
   } else {
     return null;
   }
@@ -452,9 +463,9 @@ function parseUserMessage(entry: UserEntry): ParsedMessage | null {
   if (!text.trim()) return null;
 
   return {
-    role: 'user',
+    role: "user",
     content: text,
-    contentBlocks: [{ type: 'text', text }],
+    contentBlocks: [{ type: "text", text }],
     hasToolBlocks: false,
     timestamp: entry.timestamp || new Date().toISOString(),
   };
@@ -474,36 +485,37 @@ function parseAssistantMessage(entry: AssistantEntry): ParsedMessage | null {
 
   for (const block of msgContent) {
     switch (block.type) {
-      case 'text': {
+      case "text": {
         if (block.text) {
-          contentBlocks.push({ type: 'text', text: block.text });
+          contentBlocks.push({ type: "text", text: block.text });
           textParts.push(block.text);
         }
         break;
       }
-      case 'tool_use': {
+      case "tool_use": {
         hasToolBlocks = true;
         contentBlocks.push({
-          type: 'tool_use',
-          id: block.id || '',
-          name: block.name || '',
+          type: "tool_use",
+          id: block.id || "",
+          name: block.name || "",
           input: block.input,
         });
         break;
       }
-      case 'tool_result': {
+      case "tool_result": {
         hasToolBlocks = true;
-        const resultContent = typeof block.content === 'string'
-          ? block.content
-          : Array.isArray(block.content)
+        const resultContent =
+          typeof block.content === "string"
             ? block.content
-                .filter(c => c.type === 'text')
-                .map(c => c.text || '')
-                .join('\n')
-            : '';
+            : Array.isArray(block.content)
+              ? block.content
+                  .filter((c) => c.type === "text")
+                  .map((c) => c.text || "")
+                  .join("\n")
+              : "";
         contentBlocks.push({
-          type: 'tool_result',
-          tool_use_id: block.tool_use_id || '',
+          type: "tool_result",
+          tool_use_id: block.tool_use_id || "",
           content: resultContent,
           is_error: block.is_error || false,
         });
@@ -515,10 +527,10 @@ function parseAssistantMessage(entry: AssistantEntry): ParsedMessage | null {
   if (contentBlocks.length === 0) return null;
 
   // Plain text content: join all text blocks
-  const plainText = textParts.join('\n');
+  const plainText = textParts.join("\n");
 
   return {
-    role: 'assistant',
+    role: "assistant",
     content: plainText,
     contentBlocks,
     hasToolBlocks,

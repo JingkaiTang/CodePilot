@@ -1,4 +1,4 @@
-import { query } from '@anthropic-ai/claude-agent-sdk';
+import { query } from "@anthropic-ai/claude-agent-sdk";
 import type {
   SDKMessage,
   SDKAssistantMessage,
@@ -14,17 +14,34 @@ import type {
   McpServerConfig,
   NotificationHookInput,
   PostToolUseHookInput,
-} from '@anthropic-ai/claude-agent-sdk';
-import type { ClaudeStreamOptions, SSEEvent, TokenUsage, MCPServerConfig, PermissionRequestEvent, FileAttachment, ApiProvider } from '@/types';
-import { isImageFile } from '@/types';
-import { registerPendingPermission } from './permission-registry';
-import { registerConversation, unregisterConversation } from './conversation-registry';
-import { getSetting, getActiveProvider, updateSdkSessionId, createPermissionRequest } from './db';
-import { findClaudeBinary, findGitBash, getExpandedPath } from './platform';
-import { notifyPermissionRequest, notifyGeneric } from './telegram-bot';
-import os from 'os';
-import fs from 'fs';
-import path from 'path';
+} from "@anthropic-ai/claude-agent-sdk";
+import type {
+  ClaudeStreamOptions,
+  SSEEvent,
+  TokenUsage,
+  MCPServerConfig,
+  PermissionRequestEvent,
+  FileAttachment,
+  ApiProvider,
+} from "@/types";
+import { isImageFile } from "@/types";
+import { registerPendingPermission } from "./permission-registry";
+import {
+  registerConversation,
+  unregisterConversation,
+} from "./conversation-registry";
+import {
+  getSetting,
+  getActiveProvider,
+  updateSdkSessionId,
+  createPermissionRequest,
+} from "./db";
+import { findClaudeBinary, findGitBash, getExpandedPath } from "./platform";
+import { getCustomCliPath } from "./cli-config";
+import { notifyPermissionRequest, notifyGeneric } from "./telegram-bot";
+import os from "os";
+import fs from "fs";
+import path from "path";
 
 /**
  * Sanitize a string for use as an environment variable value.
@@ -32,7 +49,7 @@ import path from 'path';
  */
 function sanitizeEnvValue(value: string): string {
   // eslint-disable-next-line no-control-regex
-  return value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  return value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
 }
 
 /**
@@ -44,7 +61,7 @@ function sanitizeEnvValue(value: string): string {
 function sanitizeEnv(env: Record<string, string>): Record<string, string> {
   const clean: Record<string, string> = {};
   for (const [key, value] of Object.entries(env)) {
-    if (typeof value === 'string') {
+    if (typeof value === "string") {
       clean[key] = sanitizeEnvValue(value);
     }
   }
@@ -58,7 +75,7 @@ function sanitizeEnv(env: Record<string, string>): Record<string, string> {
  */
 function resolveScriptFromCmd(cmdPath: string): string | undefined {
   try {
-    const content = fs.readFileSync(cmdPath, 'utf-8');
+    const content = fs.readFileSync(cmdPath, "utf-8");
     const cmdDir = path.dirname(cmdPath);
 
     // npm .cmd wrappers typically contain a line like:
@@ -100,20 +117,20 @@ function findClaudePath(): string | undefined {
  * Supports stdio, sse, and http transport types.
  */
 function toSdkMcpConfig(
-  servers: Record<string, MCPServerConfig>
+  servers: Record<string, MCPServerConfig>,
 ): Record<string, McpServerConfig> {
   const result: Record<string, McpServerConfig> = {};
   for (const [name, config] of Object.entries(servers)) {
-    const transport = config.type || 'stdio';
+    const transport = config.type || "stdio";
 
     switch (transport) {
-      case 'sse': {
+      case "sse": {
         if (!config.url) {
           console.warn(`[mcp] SSE server "${name}" is missing url, skipping`);
           continue;
         }
         const sseConfig: McpSSEServerConfig = {
-          type: 'sse',
+          type: "sse",
           url: config.url,
         };
         if (config.headers && Object.keys(config.headers).length > 0) {
@@ -123,13 +140,13 @@ function toSdkMcpConfig(
         break;
       }
 
-      case 'http': {
+      case "http": {
         if (!config.url) {
           console.warn(`[mcp] HTTP server "${name}" is missing url, skipping`);
           continue;
         }
         const httpConfig: McpHttpServerConfig = {
-          type: 'http',
+          type: "http",
           url: config.url,
         };
         if (config.headers && Object.keys(config.headers).length > 0) {
@@ -139,10 +156,12 @@ function toSdkMcpConfig(
         break;
       }
 
-      case 'stdio':
+      case "stdio":
       default: {
         if (!config.command) {
-          console.warn(`[mcp] stdio server "${name}" is missing command, skipping`);
+          console.warn(
+            `[mcp] stdio server "${name}" is missing command, skipping`,
+          );
           continue;
         }
         const stdioConfig: McpStdioServerConfig = {
@@ -171,11 +190,11 @@ function formatSSE(event: SSEEvent): string {
 function extractTextFromMessage(msg: SDKAssistantMessage): string {
   const parts: string[] = [];
   for (const block of msg.message.content) {
-    if (block.type === 'text') {
+    if (block.type === "text") {
       parts.push(block.text);
     }
   }
-  return parts.join('');
+  return parts.join("");
 }
 
 /**
@@ -188,7 +207,7 @@ function extractTokenUsage(msg: SDKResultMessage): TokenUsage | null {
     output_tokens: msg.usage.output_tokens,
     cache_read_input_tokens: msg.usage.cache_read_input_tokens ?? 0,
     cache_creation_input_tokens: msg.usage.cache_creation_input_tokens ?? 0,
-    cost_usd: 'total_cost_usd' in msg ? msg.total_cost_usd : undefined,
+    cost_usd: "total_cost_usd" in msg ? msg.total_cost_usd : undefined,
   };
 }
 
@@ -201,7 +220,10 @@ function extractTokenUsage(msg: SDKResultMessage): TokenUsage | null {
  * persisted filePath (written by the uploads route), reuse it. Otherwise
  * fall back to writing the file to .codepilot-uploads/.
  */
-function getUploadedFilePaths(files: FileAttachment[], workDir: string): string[] {
+function getUploadedFilePaths(
+  files: FileAttachment[],
+  workDir: string,
+): string[] {
   const paths: string[] = [];
   let uploadDir: string | undefined;
   for (const file of files) {
@@ -210,14 +232,16 @@ function getUploadedFilePaths(files: FileAttachment[], workDir: string): string[
     } else {
       // Fallback: write file to disk (should not happen in normal flow)
       if (!uploadDir) {
-        uploadDir = path.join(workDir, '.codepilot-uploads');
+        uploadDir = path.join(workDir, ".codepilot-uploads");
         if (!fs.existsSync(uploadDir)) {
           fs.mkdirSync(uploadDir, { recursive: true });
         }
       }
-      const safeName = path.basename(file.name).replace(/[^a-zA-Z0-9._-]/g, '_');
+      const safeName = path
+        .basename(file.name)
+        .replace(/[^a-zA-Z0-9._-]/g, "_");
       const filePath = path.join(uploadDir, `${Date.now()}-${safeName}`);
-      const buffer = Buffer.from(file.data, 'base64');
+      const buffer = Buffer.from(file.data, "base64");
       fs.writeFileSync(filePath, buffer);
       paths.push(filePath);
     }
@@ -231,41 +255,48 @@ function getUploadedFilePaths(files: FileAttachment[], workDir: string): string[
  */
 function buildPromptWithHistory(
   prompt: string,
-  history?: Array<{ role: 'user' | 'assistant'; content: string }>,
+  history?: Array<{ role: "user" | "assistant"; content: string }>,
 ): string {
   if (!history || history.length === 0) return prompt;
 
-  const lines: string[] = ['<conversation_history>'];
+  const lines: string[] = ["<conversation_history>"];
   for (const msg of history) {
     // For assistant messages with tool blocks (JSON arrays), summarize
     let content = msg.content;
-    if (msg.role === 'assistant' && content.startsWith('[')) {
+    if (msg.role === "assistant" && content.startsWith("[")) {
       try {
         const blocks = JSON.parse(content);
         const parts: string[] = [];
         for (const b of blocks) {
-          if (b.type === 'text' && b.text) parts.push(b.text);
-          else if (b.type === 'tool_use') parts.push(`[Used tool: ${b.name}]`);
-          else if (b.type === 'tool_result') {
-            const resultStr = typeof b.content === 'string' ? b.content : JSON.stringify(b.content);
+          if (b.type === "text" && b.text) parts.push(b.text);
+          else if (b.type === "tool_use") parts.push(`[Used tool: ${b.name}]`);
+          else if (b.type === "tool_result") {
+            const resultStr =
+              typeof b.content === "string"
+                ? b.content
+                : JSON.stringify(b.content);
             // Truncate long tool results
-            parts.push(`[Tool result: ${resultStr.slice(0, 500)}${resultStr.length > 500 ? '...' : ''}]`);
+            parts.push(
+              `[Tool result: ${resultStr.slice(0, 500)}${resultStr.length > 500 ? "..." : ""}]`,
+            );
           }
         }
-        content = parts.join('\n');
+        content = parts.join("\n");
       } catch {
         // Not JSON, use as-is
       }
     }
-    lines.push(`${msg.role === 'user' ? 'Human' : 'Assistant'}: ${content}`);
+    lines.push(`${msg.role === "user" ? "Human" : "Assistant"}: ${content}`);
   }
-  lines.push('</conversation_history>');
-  lines.push('');
+  lines.push("</conversation_history>");
+  lines.push("");
   lines.push(prompt);
-  return lines.join('\n');
+  return lines.join("\n");
 }
 
-export function streamClaude(options: ClaudeStreamOptions): ReadableStream<string> {
+export function streamClaude(
+  options: ClaudeStreamOptions,
+): ReadableStream<string> {
   const {
     prompt,
     sessionId,
@@ -286,13 +317,16 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
   return new ReadableStream<string>({
     async start(controller) {
       // Hoist activeProvider so it's accessible in the catch block for error messages
-      const activeProvider: ApiProvider | undefined = options.provider ?? getActiveProvider();
+      const activeProvider: ApiProvider | undefined =
+        options.provider ?? getActiveProvider();
 
       try {
         // Build env for the Claude Code subprocess.
         // Start with process.env (includes user shell env from Electron's loadUserShellEnv).
         // Then overlay any API config the user set in CodePilot settings (optional).
-        const sdkEnv: Record<string, string> = { ...process.env as Record<string, string> };
+        const sdkEnv: Record<string, string> = {
+          ...(process.env as Record<string, string>),
+        };
 
         // Ensure HOME/USERPROFILE are set so Claude Code can find ~/.claude/commands/
         if (!sdkEnv.HOME) sdkEnv.HOME = os.homedir();
@@ -307,7 +341,10 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
         delete sdkEnv.CLAUDECODE;
 
         // On Windows, auto-detect Git Bash if not already configured
-        if (process.platform === 'win32' && !process.env.CLAUDE_CODE_GIT_BASH_PATH) {
+        if (
+          process.platform === "win32" &&
+          !process.env.CLAUDE_CODE_GIT_BASH_PATH
+        ) {
           const gitBashPath = findGitBash();
           if (gitBashPath) {
             sdkEnv.CLAUDE_CODE_GIT_BASH_PATH = gitBashPath;
@@ -317,7 +354,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
         if (activeProvider && activeProvider.api_key) {
           // Clear all existing ANTHROPIC_* variables to prevent conflicts
           for (const key of Object.keys(sdkEnv)) {
-            if (key.startsWith('ANTHROPIC_')) {
+            if (key.startsWith("ANTHROPIC_")) {
               delete sdkEnv[key];
             }
           }
@@ -332,10 +369,10 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           // Inject extra environment variables
           // Empty string values mean "delete this variable" (e.g. clear ANTHROPIC_API_KEY for AUTH_TOKEN-only providers)
           try {
-            const extraEnv = JSON.parse(activeProvider.extra_env || '{}');
+            const extraEnv = JSON.parse(activeProvider.extra_env || "{}");
             for (const [key, value] of Object.entries(extraEnv)) {
-              if (typeof value === 'string') {
-                if (value === '') {
+              if (typeof value === "string") {
+                if (value === "") {
                   delete sdkEnv[key];
                 } else {
                   sdkEnv[key] = value;
@@ -350,8 +387,8 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           // environment variables already present in process.env (copied into sdkEnv above).
           // This allows users who set ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN / ANTHROPIC_BASE_URL
           // in their shell environment to use them without configuring a provider in the UI.
-          const appToken = getSetting('anthropic_auth_token');
-          const appBaseUrl = getSetting('anthropic_base_url');
+          const appToken = getSetting("anthropic_auth_token");
+          const appBaseUrl = getSetting("anthropic_base_url");
           if (appToken) {
             sdkEnv.ANTHROPIC_AUTH_TOKEN = appToken;
           }
@@ -359,21 +396,28 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
             sdkEnv.ANTHROPIC_BASE_URL = appBaseUrl;
           }
           // If neither legacy settings nor env vars provide a key, log a warning
-          if (!appToken && !sdkEnv.ANTHROPIC_API_KEY && !sdkEnv.ANTHROPIC_AUTH_TOKEN) {
-            console.warn('[claude-client] No API key found: no active provider, no legacy settings, and no ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN in environment');
+          if (
+            !appToken &&
+            !sdkEnv.ANTHROPIC_API_KEY &&
+            !sdkEnv.ANTHROPIC_AUTH_TOKEN
+          ) {
+            console.warn(
+              "[claude-client] No API key found: no active provider, no legacy settings, and no ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN in environment",
+            );
           }
         }
 
         // Check if dangerously_skip_permissions is enabled in app settings
-        const skipPermissions = getSetting('dangerously_skip_permissions') === 'true';
+        const skipPermissions =
+          getSetting("dangerously_skip_permissions") === "true";
 
         const queryOptions: Options = {
           cwd: workingDirectory || os.homedir(),
           abortController,
           includePartialMessages: true,
           permissionMode: skipPermissions
-            ? 'bypassPermissions'
-            : ((permissionMode as Options['permissionMode']) || 'acceptEdits'),
+            ? "bypassPermissions"
+            : (permissionMode as Options["permissionMode"]) || "acceptEdits",
           env: sanitizeEnv(sdkEnv),
           // Load settings so the SDK behaves like the CLI (tool permissions,
           // CLAUDE.md, etc.). When an active provider is configured in
@@ -381,27 +425,42 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           // may contain env overrides (ANTHROPIC_BASE_URL, ANTHROPIC_MODEL,
           // etc.) that would conflict with the provider's configuration.
           settingSources: activeProvider?.api_key
-            ? ['project', 'local']
-            : ['user', 'project', 'local'],
+            ? ["project", "local"]
+            : ["user", "project", "local"],
         };
 
         if (skipPermissions) {
           queryOptions.allowDangerouslySkipPermissions = true;
         }
 
-        // Find claude binary for packaged app where PATH is limited.
-        // On Windows, npm installs Claude CLI as a .cmd wrapper which cannot
+        // Resolve Claude CLI binary path:
+        // 1. User-configured custom path (Settings → General → CLI Path)
+        // 2. Auto-detected path via findClaudePath()
+        // On Windows, npm installs CLI as a .cmd wrapper which cannot
         // be spawned directly without shell:true. Parse the wrapper to
         // extract the real .js script path and pass that to the SDK instead.
-        const claudePath = findClaudePath();
+        const customCliPath = getCustomCliPath();
+        const claudePath =
+          customCliPath && fs.existsSync(customCliPath)
+            ? customCliPath
+            : findClaudePath();
+        if (customCliPath && !fs.existsSync(customCliPath)) {
+          console.warn(
+            "[claude-client] Custom CLI path not found, falling back to auto-detect:",
+            customCliPath,
+          );
+        }
         if (claudePath) {
           const ext = path.extname(claudePath).toLowerCase();
-          if (ext === '.cmd' || ext === '.bat') {
+          if (ext === ".cmd" || ext === ".bat") {
             const scriptPath = resolveScriptFromCmd(claudePath);
             if (scriptPath) {
               queryOptions.pathToClaudeCodeExecutable = scriptPath;
             } else {
-              console.warn('[claude-client] Could not resolve .js path from .cmd wrapper, falling back to SDK resolution:', claudePath);
+              console.warn(
+                "[claude-client] Could not resolve .js path from .cmd wrapper, falling back to SDK resolution:",
+                claudePath,
+              );
             }
           } else {
             queryOptions.pathToClaudeCodeExecutable = claudePath;
@@ -416,8 +475,8 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           // Use preset append mode to keep Claude Code's default system prompt
           // (which includes skills, working directory awareness, etc.)
           queryOptions.systemPrompt = {
-            type: 'preset',
-            preset: 'claude_code',
+            type: "preset",
+            preset: "claude_code",
             append: systemPrompt,
           };
         }
@@ -434,20 +493,33 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
         // Resume depends on session context (cwd/project scope), so if the
         // original working_directory no longer exists, resume will fail.
         let shouldResume = !!sdkSessionId;
-        if (shouldResume && workingDirectory && !fs.existsSync(workingDirectory)) {
-          console.warn(`[claude-client] Working directory "${workingDirectory}" does not exist, skipping resume`);
+        if (
+          shouldResume &&
+          workingDirectory &&
+          !fs.existsSync(workingDirectory)
+        ) {
+          console.warn(
+            `[claude-client] Working directory "${workingDirectory}" does not exist, skipping resume`,
+          );
           shouldResume = false;
           if (sessionId) {
-            try { updateSdkSessionId(sessionId, ''); } catch { /* best effort */ }
+            try {
+              updateSdkSessionId(sessionId, "");
+            } catch {
+              /* best effort */
+            }
           }
-          controller.enqueue(formatSSE({
-            type: 'status',
-            data: JSON.stringify({
-              notification: true,
-              title: 'Session fallback',
-              message: 'Original working directory no longer exists. Starting fresh conversation.',
+          controller.enqueue(
+            formatSSE({
+              type: "status",
+              data: JSON.stringify({
+                notification: true,
+                title: "Session fallback",
+                message:
+                  "Original working directory no longer exists. Starting fresh conversation.",
+              }),
             }),
-          }));
+          );
         }
         if (shouldResume) {
           queryOptions.resume = sdkSessionId;
@@ -461,7 +533,8 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
             permissionRequestId,
             toolName,
             toolInput: input,
-            suggestions: opts.suggestions as PermissionRequestEvent['suggestions'],
+            suggestions:
+              opts.suggestions as PermissionRequestEvent["suggestions"],
             decisionReason: opts.decisionReason,
             blockedPath: opts.blockedPath,
             toolUseId: opts.toolUseID,
@@ -469,39 +542,55 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           };
 
           // Persist permission request to DB for audit/recovery
-          const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString().replace('T', ' ').split('.')[0];
+          const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
+            .toISOString()
+            .replace("T", " ")
+            .split(".")[0];
           try {
             createPermissionRequest({
               id: permissionRequestId,
               sessionId,
-              sdkSessionId: sdkSessionId || '',
+              sdkSessionId: sdkSessionId || "",
               toolName,
               toolInput: JSON.stringify(input),
-              decisionReason: opts.decisionReason || '',
+              decisionReason: opts.decisionReason || "",
               expiresAt,
             });
           } catch (e) {
-            console.warn('[claude-client] Failed to persist permission request to DB:', e);
+            console.warn(
+              "[claude-client] Failed to persist permission request to DB:",
+              e,
+            );
           }
 
           // Send permission_request SSE event to the client
-          controller.enqueue(formatSSE({
-            type: 'permission_request',
-            data: JSON.stringify(permEvent),
-          }));
+          controller.enqueue(
+            formatSSE({
+              type: "permission_request",
+              data: JSON.stringify(permEvent),
+            }),
+          );
 
           // Notify via Telegram (fire-and-forget)
-          notifyPermissionRequest(toolName, input as Record<string, unknown>, telegramOpts).catch(() => {});
+          notifyPermissionRequest(
+            toolName,
+            input as Record<string, unknown>,
+            telegramOpts,
+          ).catch(() => {});
 
           // Notify runtime status change
-          onRuntimeStatusChange?.('waiting_permission');
+          onRuntimeStatusChange?.("waiting_permission");
 
           // Wait for user response (resolved by POST /api/chat/permission)
           // Store original input so registry can inject updatedInput on allow
-          const result = await registerPendingPermission(permissionRequestId, input, opts.signal);
+          const result = await registerPendingPermission(
+            permissionRequestId,
+            input,
+            opts.signal,
+          );
 
           // Restore runtime status after permission resolved
-          onRuntimeStatusChange?.('running');
+          onRuntimeStatusChange?.("running");
 
           return result;
         };
@@ -515,113 +604,158 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
 
         // Hooks: capture notifications and tool completion events
         queryOptions.hooks = {
-          Notification: [{
-            hooks: [async (input) => {
-              const notif = input as NotificationHookInput;
-              controller.enqueue(formatSSE({
-                type: 'status',
-                data: JSON.stringify({
-                  notification: true,
-                  title: notif.title,
-                  message: notif.message,
-                }),
-              }));
-              // Forward to Telegram (fire-and-forget)
-              notifyGeneric(notif.title || '', notif.message || '', telegramOpts).catch(() => {});
-              return {};
-            }],
-          }],
-          PostToolUse: [{
-            hooks: [async (input) => {
-              const toolEvent = input as PostToolUseHookInput;
-              console.log('[claude-client] PostToolUse:', toolEvent.tool_name, 'id:', toolEvent.tool_use_id);
-              controller.enqueue(formatSSE({
-                type: 'tool_result',
-                data: JSON.stringify({
-                  tool_use_id: toolEvent.tool_use_id,
-                  content: typeof toolEvent.tool_response === 'string'
-                    ? toolEvent.tool_response
-                    : JSON.stringify(toolEvent.tool_response),
-                  is_error: false,
-                }),
-              }));
-
-              // Detect TodoWrite tool and emit task_update SSE for frontend sync
-              if (toolEvent.tool_name === 'TodoWrite') {
-                try {
-                  // SDK TodoWriteInput: { todos: { content, status, activeForm }[] }
-                  const toolInput = toolEvent.tool_input as {
-                    todos?: Array<{ content: string; status: string; activeForm?: string }>;
-                  };
-                  if (toolInput?.todos && Array.isArray(toolInput.todos)) {
-                    console.log('[claude-client] TodoWrite detected, syncing', toolInput.todos.length, 'tasks');
-                    controller.enqueue(formatSSE({
-                      type: 'task_update',
+          Notification: [
+            {
+              hooks: [
+                async (input) => {
+                  const notif = input as NotificationHookInput;
+                  controller.enqueue(
+                    formatSSE({
+                      type: "status",
                       data: JSON.stringify({
-                        session_id: sessionId,
-                        todos: toolInput.todos.map((t, i) => ({
-                          id: String(i),
-                          content: t.content,
-                          status: t.status,
-                          activeForm: t.activeForm || '',
-                        })),
+                        notification: true,
+                        title: notif.title,
+                        message: notif.message,
                       }),
-                    }));
-                  }
-                } catch (e) {
-                  console.warn('[claude-client] Failed to parse TodoWrite input:', e);
-                }
-              }
+                    }),
+                  );
+                  // Forward to Telegram (fire-and-forget)
+                  notifyGeneric(
+                    notif.title || "",
+                    notif.message || "",
+                    telegramOpts,
+                  ).catch(() => {});
+                  return {};
+                },
+              ],
+            },
+          ],
+          PostToolUse: [
+            {
+              hooks: [
+                async (input) => {
+                  const toolEvent = input as PostToolUseHookInput;
+                  console.log(
+                    "[claude-client] PostToolUse:",
+                    toolEvent.tool_name,
+                    "id:",
+                    toolEvent.tool_use_id,
+                  );
+                  controller.enqueue(
+                    formatSSE({
+                      type: "tool_result",
+                      data: JSON.stringify({
+                        tool_use_id: toolEvent.tool_use_id,
+                        content:
+                          typeof toolEvent.tool_response === "string"
+                            ? toolEvent.tool_response
+                            : JSON.stringify(toolEvent.tool_response),
+                        is_error: false,
+                      }),
+                    }),
+                  );
 
-              return {};
-            }],
-          }],
+                  // Detect TodoWrite tool and emit task_update SSE for frontend sync
+                  if (toolEvent.tool_name === "TodoWrite") {
+                    try {
+                      // SDK TodoWriteInput: { todos: { content, status, activeForm }[] }
+                      const toolInput = toolEvent.tool_input as {
+                        todos?: Array<{
+                          content: string;
+                          status: string;
+                          activeForm?: string;
+                        }>;
+                      };
+                      if (toolInput?.todos && Array.isArray(toolInput.todos)) {
+                        console.log(
+                          "[claude-client] TodoWrite detected, syncing",
+                          toolInput.todos.length,
+                          "tasks",
+                        );
+                        controller.enqueue(
+                          formatSSE({
+                            type: "task_update",
+                            data: JSON.stringify({
+                              session_id: sessionId,
+                              todos: toolInput.todos.map((t, i) => ({
+                                id: String(i),
+                                content: t.content,
+                                status: t.status,
+                                activeForm: t.activeForm || "",
+                              })),
+                            }),
+                          }),
+                        );
+                      }
+                    } catch (e) {
+                      console.warn(
+                        "[claude-client] Failed to parse TodoWrite input:",
+                        e,
+                      );
+                    }
+                  }
+
+                  return {};
+                },
+              ],
+            },
+          ],
         };
 
         // Capture real-time stderr output from Claude Code process
         queryOptions.stderr = (data: string) => {
           // Diagnostic: log raw stderr data length to server console
-          console.log(`[stderr] received ${data.length} bytes, first 200 chars:`, data.slice(0, 200).replace(/[\x00-\x1F\x7F]/g, '?'));
+          console.log(
+            `[stderr] received ${data.length} bytes, first 200 chars:`,
+            data.slice(0, 200).replace(/[\x00-\x1F\x7F]/g, "?"),
+          );
           // Strip ANSI escape codes, OSC sequences, and control characters
           // but preserve tabs (\x09) and carriage returns (\x0D)
           const cleaned = data
-            .replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '')   // CSI sequences (colors, cursor)
-            .replace(/\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)/g, '') // OSC sequences
-            .replace(/\x1B\([A-Z]/g, '')               // Character set selection
-            .replace(/\x1B[=>]/g, '')                   // Keypad mode
-            .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '') // Control chars (keep \t \n \r)
-            .replace(/\r\n/g, '\n')                    // Normalize CRLF
-            .replace(/\r/g, '\n')                      // Convert remaining CR to LF
-            .replace(/\n{3,}/g, '\n\n')                // Collapse multiple blank lines
+            .replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "") // CSI sequences (colors, cursor)
+            .replace(/\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)/g, "") // OSC sequences
+            .replace(/\x1B\([A-Z]/g, "") // Character set selection
+            .replace(/\x1B[=>]/g, "") // Keypad mode
+            .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "") // Control chars (keep \t \n \r)
+            .replace(/\r\n/g, "\n") // Normalize CRLF
+            .replace(/\r/g, "\n") // Convert remaining CR to LF
+            .replace(/\n{3,}/g, "\n\n") // Collapse multiple blank lines
             .trim();
           if (cleaned) {
-            controller.enqueue(formatSSE({
-              type: 'tool_output',
-              data: cleaned,
-            }));
+            controller.enqueue(
+              formatSSE({
+                type: "tool_output",
+                data: cleaned,
+              }),
+            );
           }
         };
 
         // Build the prompt with file attachments and optional conversation history.
         // When resuming, the SDK has full context so we send the raw prompt.
         // When NOT resuming (fresh or fallback), prepend DB history for context.
-        function buildFinalPrompt(useHistory: boolean): string | AsyncIterable<SDKUserMessage> {
+        function buildFinalPrompt(
+          useHistory: boolean,
+        ): string | AsyncIterable<SDKUserMessage> {
           const basePrompt = useHistory
             ? buildPromptWithHistory(prompt, conversationHistory)
             : prompt;
 
           if (!files || files.length === 0) return basePrompt;
 
-          const imageFiles = files.filter(f => isImageFile(f.type));
-          const nonImageFiles = files.filter(f => !isImageFile(f.type));
+          const imageFiles = files.filter((f) => isImageFile(f.type));
+          const nonImageFiles = files.filter((f) => !isImageFile(f.type));
 
           let textPrompt = basePrompt;
           if (nonImageFiles.length > 0) {
             const workDir = workingDirectory || os.homedir();
             const savedPaths = getUploadedFilePaths(nonImageFiles, workDir);
             const fileReferences = savedPaths
-              .map((p, i) => `[User attached file: ${p} (${nonImageFiles[i].name})]`)
-              .join('\n');
+              .map(
+                (p, i) =>
+                  `[User attached file: ${p} (${nonImageFiles[i].name})]`,
+              )
+              .join("\n");
             textPrompt = `${fileReferences}\n\nPlease read the attached file(s) above using your Read tool, then respond to the user's message:\n\n${basePrompt}`;
           }
 
@@ -637,37 +771,43 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
                   const workDir = workingDirectory || os.homedir();
                   const imagePaths = getUploadedFilePaths(imageFiles, workDir);
                   const imageReferences = imagePaths
-                    .map((p, i) => `[User attached image: ${p} (${imageFiles[i].name})]`)
-                    .join('\n');
+                    .map(
+                      (p, i) =>
+                        `[User attached image: ${p} (${imageFiles[i].name})]`,
+                    )
+                    .join("\n");
                   return `${imageReferences}\n\n${textPrompt}`;
                 })();
 
             const contentBlocks: Array<
-              | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
-              | { type: 'text'; text: string }
+              | {
+                  type: "image";
+                  source: { type: "base64"; media_type: string; data: string };
+                }
+              | { type: "text"; text: string }
             > = [];
 
             for (const img of imageFiles) {
               contentBlocks.push({
-                type: 'image',
+                type: "image",
                 source: {
-                  type: 'base64',
-                  media_type: img.type || 'image/png',
+                  type: "base64",
+                  media_type: img.type || "image/png",
                   data: img.data,
                 },
               });
             }
 
-            contentBlocks.push({ type: 'text', text: textWithImageRefs });
+            contentBlocks.push({ type: "text", text: textWithImageRefs });
 
             const userMessage: SDKUserMessage = {
-              type: 'user',
+              type: "user",
               message: {
-                role: 'user',
+                role: "user",
                 content: contentBlocks,
               },
               parent_tool_use_id: null,
-              session_id: sdkSessionId || '',
+              session_id: sdkSessionId || "",
             };
 
             return (async function* () {
@@ -705,21 +845,34 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
               }
             })() as ReturnType<typeof query>;
           } catch (resumeError) {
-            const errMsg = resumeError instanceof Error ? resumeError.message : String(resumeError);
-            console.warn('[claude-client] Resume failed, retrying without resume:', errMsg);
+            const errMsg =
+              resumeError instanceof Error
+                ? resumeError.message
+                : String(resumeError);
+            console.warn(
+              "[claude-client] Resume failed, retrying without resume:",
+              errMsg,
+            );
             // Clear stale sdk_session_id so future messages don't retry this broken resume
             if (sessionId) {
-              try { updateSdkSessionId(sessionId, ''); } catch { /* best effort */ }
+              try {
+                updateSdkSessionId(sessionId, "");
+              } catch {
+                /* best effort */
+              }
             }
             // Notify frontend about the fallback
-            controller.enqueue(formatSSE({
-              type: 'status',
-              data: JSON.stringify({
-                notification: true,
-                title: 'Session fallback',
-                message: 'Previous session could not be resumed. Starting fresh conversation.',
+            controller.enqueue(
+              formatSSE({
+                type: "status",
+                data: JSON.stringify({
+                  notification: true,
+                  title: "Session fallback",
+                  message:
+                    "Previous session could not be resumed. Starting fresh conversation.",
+                }),
               }),
-            }));
+            );
             // Remove resume and try again as a fresh conversation with history context
             delete queryOptions.resume;
             conversation = query({
@@ -731,7 +884,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
 
         registerConversation(sessionId, conversation);
 
-        let lastAssistantText = '';
+        let lastAssistantText = "";
         let tokenUsage: TokenUsage | null = null;
 
         for await (const message of conversation) {
@@ -740,7 +893,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           }
 
           switch (message.type) {
-            case 'assistant': {
+            case "assistant": {
               const assistantMsg = message as SDKAssistantMessage;
               // Text deltas are handled by stream_event for real-time streaming.
               // Only track lastAssistantText here and process tool_use blocks.
@@ -751,126 +904,152 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
 
               // Check for tool use blocks
               for (const block of assistantMsg.message.content) {
-                if (block.type === 'tool_use') {
-                  controller.enqueue(formatSSE({
-                    type: 'tool_use',
-                    data: JSON.stringify({
-                      id: block.id,
-                      name: block.name,
-                      input: block.input,
+                if (block.type === "tool_use") {
+                  controller.enqueue(
+                    formatSSE({
+                      type: "tool_use",
+                      data: JSON.stringify({
+                        id: block.id,
+                        name: block.name,
+                        input: block.input,
+                      }),
                     }),
-                  }));
+                  );
                 }
               }
               break;
             }
 
-            case 'user': {
+            case "user": {
               // Tool execution results come back as user messages with tool_result blocks
               const userMsg = message as SDKUserMessage;
               const content = userMsg.message.content;
               if (Array.isArray(content)) {
                 for (const block of content) {
-                  if (block.type === 'tool_result') {
-                    const resultContent = typeof block.content === 'string'
-                      ? block.content
-                      : Array.isArray(block.content)
+                  if (block.type === "tool_result") {
+                    const resultContent =
+                      typeof block.content === "string"
                         ? block.content
-                            .filter((c: { type: string }) => c.type === 'text')
-                            .map((c: { text: string }) => c.text)
-                            .join('\n')
-                        : String(block.content ?? '');
-                    controller.enqueue(formatSSE({
-                      type: 'tool_result',
-                      data: JSON.stringify({
-                        tool_use_id: block.tool_use_id,
-                        content: resultContent,
-                        is_error: block.is_error || false,
+                        : Array.isArray(block.content)
+                          ? block.content
+                              .filter(
+                                (c: { type: string }) => c.type === "text",
+                              )
+                              .map((c: { text: string }) => c.text)
+                              .join("\n")
+                          : String(block.content ?? "");
+                    controller.enqueue(
+                      formatSSE({
+                        type: "tool_result",
+                        data: JSON.stringify({
+                          tool_use_id: block.tool_use_id,
+                          content: resultContent,
+                          is_error: block.is_error || false,
+                        }),
                       }),
-                    }));
+                    );
                   }
                 }
               }
               break;
             }
 
-            case 'stream_event': {
+            case "stream_event": {
               const streamEvent = message as SDKPartialAssistantMessage;
               const evt = streamEvent.event;
-              if (evt.type === 'content_block_delta' && 'delta' in evt) {
+              if (evt.type === "content_block_delta" && "delta" in evt) {
                 const delta = evt.delta;
-                if ('text' in delta && delta.text) {
-                  controller.enqueue(formatSSE({ type: 'text', data: delta.text }));
+                if ("text" in delta && delta.text) {
+                  controller.enqueue(
+                    formatSSE({ type: "text", data: delta.text }),
+                  );
                 }
               }
               break;
             }
 
-            case 'system': {
+            case "system": {
               const sysMsg = message as SDKSystemMessage;
-              if ('subtype' in sysMsg) {
-                if (sysMsg.subtype === 'init') {
-                  controller.enqueue(formatSSE({
-                    type: 'status',
-                    data: JSON.stringify({
-                      session_id: sysMsg.session_id,
-                      model: sysMsg.model,
-                      tools: sysMsg.tools,
+              if ("subtype" in sysMsg) {
+                if (sysMsg.subtype === "init") {
+                  controller.enqueue(
+                    formatSSE({
+                      type: "status",
+                      data: JSON.stringify({
+                        session_id: sysMsg.session_id,
+                        model: sysMsg.model,
+                        tools: sysMsg.tools,
+                      }),
                     }),
-                  }));
-                } else if (sysMsg.subtype === 'status') {
+                  );
+                } else if (sysMsg.subtype === "status") {
                   // SDK sends status messages when permission mode changes (e.g. ExitPlanMode)
-                  const statusMsg = sysMsg as SDKSystemMessage & { permissionMode?: string };
+                  const statusMsg = sysMsg as SDKSystemMessage & {
+                    permissionMode?: string;
+                  };
                   if (statusMsg.permissionMode) {
-                    controller.enqueue(formatSSE({
-                      type: 'mode_changed',
-                      data: statusMsg.permissionMode,
-                    }));
+                    controller.enqueue(
+                      formatSSE({
+                        type: "mode_changed",
+                        data: statusMsg.permissionMode,
+                      }),
+                    );
                   }
                 }
               }
               break;
             }
 
-            case 'tool_progress': {
+            case "tool_progress": {
               const progressMsg = message as SDKToolProgressMessage;
-              controller.enqueue(formatSSE({
-                type: 'tool_output',
-                data: JSON.stringify({
-                  _progress: true,
-                  tool_use_id: progressMsg.tool_use_id,
-                  tool_name: progressMsg.tool_name,
-                  elapsed_time_seconds: progressMsg.elapsed_time_seconds,
-                }),
-              }));
-              // Auto-timeout: abort if tool runs longer than configured threshold
-              if (toolTimeoutSeconds > 0 && progressMsg.elapsed_time_seconds >= toolTimeoutSeconds) {
-                controller.enqueue(formatSSE({
-                  type: 'tool_timeout',
+              controller.enqueue(
+                formatSSE({
+                  type: "tool_output",
                   data: JSON.stringify({
+                    _progress: true,
+                    tool_use_id: progressMsg.tool_use_id,
                     tool_name: progressMsg.tool_name,
-                    elapsed_seconds: Math.round(progressMsg.elapsed_time_seconds),
+                    elapsed_time_seconds: progressMsg.elapsed_time_seconds,
                   }),
-                }));
+                }),
+              );
+              // Auto-timeout: abort if tool runs longer than configured threshold
+              if (
+                toolTimeoutSeconds > 0 &&
+                progressMsg.elapsed_time_seconds >= toolTimeoutSeconds
+              ) {
+                controller.enqueue(
+                  formatSSE({
+                    type: "tool_timeout",
+                    data: JSON.stringify({
+                      tool_name: progressMsg.tool_name,
+                      elapsed_seconds: Math.round(
+                        progressMsg.elapsed_time_seconds,
+                      ),
+                    }),
+                  }),
+                );
                 abortController?.abort();
               }
               break;
             }
 
-            case 'result': {
+            case "result": {
               const resultMsg = message as SDKResultMessage;
               tokenUsage = extractTokenUsage(resultMsg);
-              controller.enqueue(formatSSE({
-                type: 'result',
-                data: JSON.stringify({
-                  subtype: resultMsg.subtype,
-                  is_error: resultMsg.is_error,
-                  num_turns: resultMsg.num_turns,
-                  duration_ms: resultMsg.duration_ms,
-                  usage: tokenUsage,
-                  session_id: resultMsg.session_id,
+              controller.enqueue(
+                formatSSE({
+                  type: "result",
+                  data: JSON.stringify({
+                    subtype: resultMsg.subtype,
+                    is_error: resultMsg.is_error,
+                    num_turns: resultMsg.num_turns,
+                    duration_ms: resultMsg.duration_ms,
+                    usage: tokenUsage,
+                    session_id: resultMsg.session_id,
+                  }),
                 }),
-              }));
+              );
               break;
             }
 
@@ -883,61 +1062,110 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           }
         }
 
-        controller.enqueue(formatSSE({ type: 'done', data: '' }));
+        controller.enqueue(formatSSE({ type: "done", data: "" }));
         controller.close();
       } catch (error) {
-        const rawMessage = error instanceof Error ? error.message : 'Unknown error';
+        const rawMessage =
+          error instanceof Error ? error.message : "Unknown error";
         // Log full error details for debugging (visible in terminal / dev tools)
-        console.error('[claude-client] Stream error:', {
+        console.error("[claude-client] Stream error:", {
           message: rawMessage,
           stack: error instanceof Error ? error.stack : undefined,
-          cause: error instanceof Error ? (error as { cause?: unknown }).cause : undefined,
-          stderr: error instanceof Error ? (error as { stderr?: string }).stderr : undefined,
-          code: error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined,
+          cause:
+            error instanceof Error
+              ? (error as { cause?: unknown }).cause
+              : undefined,
+          stderr:
+            error instanceof Error
+              ? (error as { stderr?: string }).stderr
+              : undefined,
+          code:
+            error instanceof Error
+              ? (error as NodeJS.ErrnoException).code
+              : undefined,
         });
 
         // Try to extract stderr or cause for more useful error messages
-        const stderr = error instanceof Error ? (error as { stderr?: string }).stderr : undefined;
-        const cause = error instanceof Error ? (error as { cause?: unknown }).cause : undefined;
-        const extraDetail = stderr || (cause instanceof Error ? cause.message : cause ? String(cause) : '');
+        const stderr =
+          error instanceof Error
+            ? (error as { stderr?: string }).stderr
+            : undefined;
+        const cause =
+          error instanceof Error
+            ? (error as { cause?: unknown }).cause
+            : undefined;
+        const extraDetail =
+          stderr ||
+          (cause instanceof Error ? cause.message : cause ? String(cause) : "");
 
         let errorMessage = rawMessage;
 
         // Provide more specific error messages based on error type
         if (error instanceof Error) {
           const code = (error as NodeJS.ErrnoException).code;
-          if (code === 'ENOENT' || rawMessage.includes('ENOENT') || rawMessage.includes('spawn')) {
+          if (
+            code === "ENOENT" ||
+            rawMessage.includes("ENOENT") ||
+            rawMessage.includes("spawn")
+          ) {
             errorMessage = `Claude Code CLI not found. Please ensure Claude Code is installed and available in your PATH.\n\nOriginal error: ${rawMessage}`;
-          } else if (rawMessage.includes('exited with code 1') || rawMessage.includes('exit code 1')) {
-            const providerHint = activeProvider?.name ? ` (Provider: ${activeProvider.name})` : '';
-            const detailHint = extraDetail ? `\n\nDetails: ${extraDetail}` : '';
+          } else if (
+            rawMessage.includes("exited with code 1") ||
+            rawMessage.includes("exit code 1")
+          ) {
+            const providerHint = activeProvider?.name
+              ? ` (Provider: ${activeProvider.name})`
+              : "";
+            const detailHint = extraDetail ? `\n\nDetails: ${extraDetail}` : "";
             errorMessage = `Claude Code process exited with an error${providerHint}. This is often caused by:\n• Invalid or missing API Key\n• Incorrect Base URL configuration\n• Network connectivity issues${detailHint}\n\nOriginal error: ${rawMessage}`;
-          } else if (rawMessage.includes('exited with code')) {
-            const providerHint = activeProvider?.name ? ` (Provider: ${activeProvider.name})` : '';
+          } else if (rawMessage.includes("exited with code")) {
+            const providerHint = activeProvider?.name
+              ? ` (Provider: ${activeProvider.name})`
+              : "";
             errorMessage = `Claude Code process crashed unexpectedly${providerHint}.\n\nOriginal error: ${rawMessage}`;
-          } else if (code === 'ECONNREFUSED' || rawMessage.includes('ECONNREFUSED') || rawMessage.includes('fetch failed')) {
-            const baseUrl = activeProvider?.base_url || 'default';
+          } else if (
+            code === "ECONNREFUSED" ||
+            rawMessage.includes("ECONNREFUSED") ||
+            rawMessage.includes("fetch failed")
+          ) {
+            const baseUrl = activeProvider?.base_url || "default";
             errorMessage = `Cannot connect to API endpoint (${baseUrl}). Please check your network connection and Base URL configuration.\n\nOriginal error: ${rawMessage}`;
-          } else if (rawMessage.includes('401') || rawMessage.includes('Unauthorized') || rawMessage.includes('authentication')) {
-            const providerHint = activeProvider?.name ? ` for provider "${activeProvider.name}"` : '';
+          } else if (
+            rawMessage.includes("401") ||
+            rawMessage.includes("Unauthorized") ||
+            rawMessage.includes("authentication")
+          ) {
+            const providerHint = activeProvider?.name
+              ? ` for provider "${activeProvider.name}"`
+              : "";
             errorMessage = `Authentication failed${providerHint}. Please verify your API Key is correct and has not expired.\n\nOriginal error: ${rawMessage}`;
-          } else if (rawMessage.includes('403') || rawMessage.includes('Forbidden')) {
+          } else if (
+            rawMessage.includes("403") ||
+            rawMessage.includes("Forbidden")
+          ) {
             errorMessage = `Access denied. Your API Key may not have permission for this operation.\n\nOriginal error: ${rawMessage}`;
-          } else if (rawMessage.includes('429') || rawMessage.includes('rate limit') || rawMessage.includes('Rate limit')) {
+          } else if (
+            rawMessage.includes("429") ||
+            rawMessage.includes("rate limit") ||
+            rawMessage.includes("Rate limit")
+          ) {
             errorMessage = `Rate limit exceeded. Please wait a moment before retrying.\n\nOriginal error: ${rawMessage}`;
           }
         }
 
-        controller.enqueue(formatSSE({ type: 'error', data: errorMessage }));
-        controller.enqueue(formatSSE({ type: 'done', data: '' }));
+        controller.enqueue(formatSSE({ type: "error", data: errorMessage }));
+        controller.enqueue(formatSSE({ type: "done", data: "" }));
 
         // If we were resuming a session and it crashed mid-stream, clear the
         // stale sdk_session_id so the next message starts a fresh SDK session
         // instead of repeatedly hitting the same broken resume.
         if (sdkSessionId && sessionId) {
           try {
-            updateSdkSessionId(sessionId, '');
-            console.warn('[claude-client] Cleared stale sdk_session_id for session', sessionId);
+            updateSdkSessionId(sessionId, "");
+            console.warn(
+              "[claude-client] Cleared stale sdk_session_id for session",
+              sessionId,
+            );
           } catch {
             // best effort
           }

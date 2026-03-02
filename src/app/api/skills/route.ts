@@ -14,10 +14,14 @@ interface SkillFile {
 }
 
 type InstalledSource = "agents" | "claude";
-type InstalledSkill = SkillFile & { installedSource: InstalledSource; contentHash: string };
+type InstalledSkill = SkillFile & {
+  installedSource: InstalledSource;
+  contentHash: string;
+};
 
 function getGlobalCommandsDir(): string {
-  return path.join(os.homedir(), ".claude", "commands");
+  const { getClaudeCommandsDir } = require("@/lib/cli-config");
+  return getClaudeCommandsDir();
 }
 
 function getProjectCommandsDir(cwd?: string): string {
@@ -30,7 +34,8 @@ function getProjectSkillsDir(cwd?: string): string {
 
 function getPluginCommandsDirs(): string[] {
   const dirs: string[] = [];
-  const marketplacesDir = path.join(os.homedir(), ".claude", "plugins", "marketplaces");
+  const { getClaudePluginsDir } = require("@/lib/cli-config");
+  const marketplacesDir = path.join(getClaudePluginsDir(), "marketplaces");
   if (!fs.existsSync(marketplacesDir)) return dirs;
 
   try {
@@ -58,7 +63,8 @@ function getInstalledSkillsDir(): string {
 }
 
 function getClaudeSkillsDir(): string {
-  return path.join(os.homedir(), ".claude", "skills");
+  const cliConfig = require("@/lib/cli-config");
+  return cliConfig.getClaudeSkillsDir();
 }
 
 /**
@@ -103,7 +109,10 @@ function computeContentHash(content: string): string {
  * Parse YAML front matter from SKILL.md content.
  * Extracts `name` and `description` fields from the --- delimited block.
  */
-function parseSkillFrontMatter(content: string): { name?: string; description?: string } {
+function parseSkillFrontMatter(content: string): {
+  name?: string;
+  description?: string;
+} {
   // Extract front matter between --- delimiters
   const fmMatch = content.match(/^---\r?\n([\s\S]+?)\r?\n---/);
   if (!fmMatch) return {};
@@ -154,7 +163,7 @@ function parseSkillFrontMatter(content: string): { name?: string; description?: 
  */
 function scanInstalledSkills(
   dir: string,
-  installedSource: InstalledSource
+  installedSource: InstalledSource,
 ): InstalledSkill[] {
   const skills: InstalledSkill[] = [];
   if (!fs.existsSync(dir)) return skills;
@@ -191,7 +200,7 @@ function scanInstalledSkills(
 function resolveInstalledSkills(
   agentsSkills: InstalledSkill[],
   claudeSkills: InstalledSkill[],
-  preferredSource: InstalledSource
+  preferredSource: InstalledSource,
 ): SkillFile[] {
   const all = [...agentsSkills, ...claudeSkills];
   const byName = new Map<string, InstalledSkill[]>();
@@ -228,7 +237,7 @@ function resolveInstalledSkills(
 function scanDirectory(
   dir: string,
   source: "global" | "project" | "plugin",
-  prefix = ""
+  prefix = "",
 ): SkillFile[] {
   const skills: SkillFile[] = [];
   if (!fs.existsSync(dir)) return skills;
@@ -271,8 +280,12 @@ export async function GET(request: NextRequest) {
     const globalDir = getGlobalCommandsDir();
     const projectDir = getProjectCommandsDir(cwd);
 
-    console.log(`[skills] Scanning global: ${globalDir} (exists: ${fs.existsSync(globalDir)})`);
-    console.log(`[skills] Scanning project: ${projectDir} (exists: ${fs.existsSync(projectDir)})`);
+    console.log(
+      `[skills] Scanning global: ${globalDir} (exists: ${fs.existsSync(globalDir)})`,
+    );
+    console.log(
+      `[skills] Scanning project: ${projectDir} (exists: ${fs.existsSync(projectDir)})`,
+    );
     console.log(`[skills] HOME=${process.env.HOME}, homedir=${os.homedir()}`);
 
     const globalSkills = scanDirectory(globalDir, "global");
@@ -280,20 +293,28 @@ export async function GET(request: NextRequest) {
 
     // Scan project-level skills (.claude/skills/*/SKILL.md)
     const projectSkillsDir = getProjectSkillsDir(cwd);
-    console.log(`[skills] Scanning project skills: ${projectSkillsDir} (exists: ${fs.existsSync(projectSkillsDir)})`);
+    console.log(
+      `[skills] Scanning project skills: ${projectSkillsDir} (exists: ${fs.existsSync(projectSkillsDir)})`,
+    );
     const projectLevelSkills = scanProjectSkills(projectSkillsDir);
-    console.log(`[skills] Found ${projectLevelSkills.length} project-level skills`);
+    console.log(
+      `[skills] Found ${projectLevelSkills.length} project-level skills`,
+    );
 
     // Deduplicate: project commands take priority over project skills with the same name
     const projectCommandNames = new Set(projectSkills.map((s) => s.name));
     const dedupedProjectSkills = projectLevelSkills.filter(
-      (s) => !projectCommandNames.has(s.name)
+      (s) => !projectCommandNames.has(s.name),
     );
 
     const agentsSkillsDir = getInstalledSkillsDir();
     const claudeSkillsDir = getClaudeSkillsDir();
-    console.log(`[skills] Scanning installed: ${agentsSkillsDir} (exists: ${fs.existsSync(agentsSkillsDir)})`);
-    console.log(`[skills] Scanning installed: ${claudeSkillsDir} (exists: ${fs.existsSync(claudeSkillsDir)})`);
+    console.log(
+      `[skills] Scanning installed: ${agentsSkillsDir} (exists: ${fs.existsSync(agentsSkillsDir)})`,
+    );
+    console.log(
+      `[skills] Scanning installed: ${claudeSkillsDir} (exists: ${fs.existsSync(claudeSkillsDir)})`,
+    );
     const agentsSkills = scanInstalledSkills(agentsSkillsDir, "agents");
     const claudeSkills = scanInstalledSkills(claudeSkillsDir, "claude");
     const preferredInstalledSource: InstalledSource =
@@ -303,12 +324,12 @@ export async function GET(request: NextRequest) {
           ? "agents"
           : "claude";
     console.log(
-      `[skills] Installed counts: agents=${agentsSkills.length}, claude=${claudeSkills.length}, preferred=${preferredInstalledSource}`
+      `[skills] Installed counts: agents=${agentsSkills.length}, claude=${claudeSkills.length}, preferred=${preferredInstalledSource}`,
     );
     const installedSkills = resolveInstalledSkills(
       agentsSkills,
       claudeSkills,
-      preferredInstalledSource
+      preferredInstalledSource,
     );
 
     // Scan installed plugin skills
@@ -317,15 +338,25 @@ export async function GET(request: NextRequest) {
       pluginSkills.push(...scanDirectory(dir, "plugin"));
     }
 
-    const all = [...globalSkills, ...projectSkills, ...dedupedProjectSkills, ...installedSkills, ...pluginSkills];
-    console.log(`[skills] Found: global=${globalSkills.length}, project=${projectSkills.length}, projectSkills=${dedupedProjectSkills.length}, installed=${installedSkills.length}, plugin=${pluginSkills.length}`);
+    const all = [
+      ...globalSkills,
+      ...projectSkills,
+      ...dedupedProjectSkills,
+      ...installedSkills,
+      ...pluginSkills,
+    ];
+    console.log(
+      `[skills] Found: global=${globalSkills.length}, project=${projectSkills.length}, projectSkills=${dedupedProjectSkills.length}, installed=${installedSkills.length}, plugin=${pluginSkills.length}`,
+    );
 
     return NextResponse.json({ skills: all });
   } catch (error) {
-    console.error('[skills] Error:', error);
+    console.error("[skills] Error:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to load skills" },
-      { status: 500 }
+      {
+        error: error instanceof Error ? error.message : "Failed to load skills",
+      },
+      { status: 500 },
     );
   }
 }
@@ -343,7 +374,7 @@ export async function POST(request: Request) {
     if (!name || typeof name !== "string") {
       return NextResponse.json(
         { error: "Skill name is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -352,7 +383,7 @@ export async function POST(request: Request) {
     if (!safeName) {
       return NextResponse.json(
         { error: "Invalid skill name" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -367,7 +398,7 @@ export async function POST(request: Request) {
     if (fs.existsSync(filePath)) {
       return NextResponse.json(
         { error: "A skill with this name already exists" },
-        { status: 409 }
+        { status: 409 },
       );
     }
 
@@ -388,12 +419,15 @@ export async function POST(request: Request) {
           filePath,
         },
       },
-      { status: 201 }
+      { status: 201 },
     );
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to create skill" },
-      { status: 500 }
+      {
+        error:
+          error instanceof Error ? error.message : "Failed to create skill",
+      },
+      { status: 500 },
     );
   }
 }

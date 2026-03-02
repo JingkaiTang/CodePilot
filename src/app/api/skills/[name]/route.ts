@@ -5,7 +5,8 @@ import os from "os";
 import crypto from "crypto";
 
 function getGlobalCommandsDir(): string {
-  return path.join(os.homedir(), ".claude", "commands");
+  const { getClaudeCommandsDir } = require("@/lib/cli-config");
+  return getClaudeCommandsDir();
 }
 
 function getProjectCommandsDir(cwd?: string): string {
@@ -21,7 +22,8 @@ function getInstalledSkillsDir(): string {
 }
 
 function getClaudeSkillsDir(): string {
-  return path.join(os.homedir(), ".claude", "skills");
+  const cliConfig = require("@/lib/cli-config");
+  return cliConfig.getClaudeSkillsDir();
 }
 
 type InstalledSource = "agents" | "claude";
@@ -40,7 +42,10 @@ function computeContentHash(content: string): string {
  * Parse YAML front matter from SKILL.md content.
  * Extracts `name` and `description` fields from the --- delimited block.
  */
-function parseSkillFrontMatter(content: string): { name?: string; description?: string } {
+function parseSkillFrontMatter(content: string): {
+  name?: string;
+  description?: string;
+} {
   const fmMatch = content.match(/^---\r?\n([\s\S]+?)\r?\n---/);
   if (!fmMatch) return {};
 
@@ -114,7 +119,7 @@ type InstalledMatch = {
 
 function findInstalledSkillMatches(
   name: string,
-  installedSource?: InstalledSource
+  installedSource?: InstalledSource,
 ): InstalledMatch[] {
   const matches: InstalledMatch[] = [];
   const dirs: Array<{ dir: string; source: InstalledSource }> = [];
@@ -153,22 +158,30 @@ function findInstalledSkillMatches(
 
 function findSkillFile(
   name: string,
-  options?: { installedSource?: InstalledSource; installedOnly?: boolean; cwd?: string }
-):
-  | SkillMatch
-  | { conflict: true; sources: InstalledSource[] }
-  | null {
+  options?: {
+    installedSource?: InstalledSource;
+    installedOnly?: boolean;
+    cwd?: string;
+  },
+): SkillMatch | { conflict: true; sources: InstalledSource[] } | null {
   const installedSource = options?.installedSource;
 
   if (!options?.installedOnly) {
     // Check project commands → project skills → global commands → installed
-    const projectPath = path.join(getProjectCommandsDir(options?.cwd), `${name}.md`);
+    const projectPath = path.join(
+      getProjectCommandsDir(options?.cwd),
+      `${name}.md`,
+    );
     if (fs.existsSync(projectPath)) {
       return { filePath: projectPath, source: "project" };
     }
 
     // Check project-level .claude/skills/{name}/SKILL.md
-    const projectSkillPath = path.join(getProjectSkillsDir(options?.cwd), name, "SKILL.md");
+    const projectSkillPath = path.join(
+      getProjectSkillsDir(options?.cwd),
+      name,
+      "SKILL.md",
+    );
     if (fs.existsSync(projectSkillPath)) {
       return { filePath: projectSkillPath, source: "project" };
     }
@@ -177,11 +190,17 @@ function findSkillFile(
     const projectSkillsDir = getProjectSkillsDir(options?.cwd);
     if (fs.existsSync(projectSkillsDir)) {
       try {
-        const entries = fs.readdirSync(projectSkillsDir, { withFileTypes: true });
+        const entries = fs.readdirSync(projectSkillsDir, {
+          withFileTypes: true,
+        });
         for (const entry of entries) {
           if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
           if (entry.name === name) continue; // already checked above
-          const skillMdPath = path.join(projectSkillsDir, entry.name, "SKILL.md");
+          const skillMdPath = path.join(
+            projectSkillsDir,
+            entry.name,
+            "SKILL.md",
+          );
           if (!fs.existsSync(skillMdPath)) continue;
           const skillContent = fs.readFileSync(skillMdPath, "utf-8");
           const meta = parseSkillFrontMatter(skillContent);
@@ -227,7 +246,7 @@ function findSkillFile(
     return {
       conflict: true,
       sources: Array.from(
-        new Set(installedMatches.map((m) => m.installedSource))
+        new Set(installedMatches.map((m) => m.installedSource)),
       ),
     };
   }
@@ -237,7 +256,7 @@ function findSkillFile(
 
 export async function GET(
   _request: Request,
-  { params }: { params: Promise<{ name: string }> }
+  { params }: { params: Promise<{ name: string }> },
 ) {
   try {
     const { name } = await params;
@@ -251,17 +270,24 @@ export async function GET(
     if (sourceParam && !installedSource) {
       return NextResponse.json(
         { error: "Invalid source; expected 'agents' or 'claude'" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const found = installedSource
-      ? findSkillFile(name, { installedSource, installedOnly: true, cwd: cwdParam })
+      ? findSkillFile(name, {
+          installedSource,
+          installedOnly: true,
+          cwd: cwdParam,
+        })
       : findSkillFile(name, { cwd: cwdParam });
     if (found && "conflict" in found) {
       return NextResponse.json(
-        { error: "Multiple skills with different content", sources: found.sources },
-        { status: 409 }
+        {
+          error: "Multiple skills with different content",
+          sources: found.sources,
+        },
+        { status: 409 },
       );
     }
     if (!found) {
@@ -274,7 +300,11 @@ export async function GET(
 
     if (found.filePath.endsWith("SKILL.md")) {
       const meta = parseSkillFrontMatter(content);
-      description = meta.description || (firstLine.startsWith("#") ? firstLine.replace(/^#+\s*/, "") : firstLine || `Skill: /${name}`);
+      description =
+        meta.description ||
+        (firstLine.startsWith("#")
+          ? firstLine.replace(/^#+\s*/, "")
+          : firstLine || `Skill: /${name}`);
     } else {
       description = firstLine.startsWith("#")
         ? firstLine.replace(/^#+\s*/, "")
@@ -293,15 +323,17 @@ export async function GET(
     });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to read skill" },
-      { status: 500 }
+      {
+        error: error instanceof Error ? error.message : "Failed to read skill",
+      },
+      { status: 500 },
     );
   }
 }
 
 export async function PUT(
   request: Request,
-  { params }: { params: Promise<{ name: string }> }
+  { params }: { params: Promise<{ name: string }> },
 ) {
   try {
     const { name } = await params;
@@ -318,17 +350,24 @@ export async function PUT(
     if (sourceParam && !installedSource) {
       return NextResponse.json(
         { error: "Invalid source; expected 'agents' or 'claude'" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const found = installedSource
-      ? findSkillFile(name, { installedSource, installedOnly: true, cwd: cwdParam })
+      ? findSkillFile(name, {
+          installedSource,
+          installedOnly: true,
+          cwd: cwdParam,
+        })
       : findSkillFile(name, { cwd: cwdParam });
     if (found && "conflict" in found) {
       return NextResponse.json(
-        { error: "Multiple skills with different content", sources: found.sources },
-        { status: 409 }
+        {
+          error: "Multiple skills with different content",
+          sources: found.sources,
+        },
+        { status: 409 },
       );
     }
     if (!found) {
@@ -354,15 +393,18 @@ export async function PUT(
     });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to update skill" },
-      { status: 500 }
+      {
+        error:
+          error instanceof Error ? error.message : "Failed to update skill",
+      },
+      { status: 500 },
     );
   }
 }
 
 export async function DELETE(
   _request: Request,
-  { params }: { params: Promise<{ name: string }> }
+  { params }: { params: Promise<{ name: string }> },
 ) {
   try {
     const { name } = await params;
@@ -376,17 +418,24 @@ export async function DELETE(
     if (sourceParam && !installedSource) {
       return NextResponse.json(
         { error: "Invalid source; expected 'agents' or 'claude'" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const found = installedSource
-      ? findSkillFile(name, { installedSource, installedOnly: true, cwd: cwdParam })
+      ? findSkillFile(name, {
+          installedSource,
+          installedOnly: true,
+          cwd: cwdParam,
+        })
       : findSkillFile(name, { cwd: cwdParam });
     if (found && "conflict" in found) {
       return NextResponse.json(
-        { error: "Multiple skills with different content", sources: found.sources },
-        { status: 409 }
+        {
+          error: "Multiple skills with different content",
+          sources: found.sources,
+        },
+        { status: 409 },
       );
     }
     if (!found) {
@@ -397,8 +446,11 @@ export async function DELETE(
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to delete skill" },
-      { status: 500 }
+      {
+        error:
+          error instanceof Error ? error.message : "Failed to delete skill",
+      },
+      { status: 500 },
     );
   }
 }

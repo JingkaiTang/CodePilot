@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import os from "os";
+import { getClaudeSettingsPath } from "@/lib/cli-config";
 
-const SETTINGS_PATH = path.join(os.homedir(), ".claude", "settings.json");
+const SETTINGS_PATH = getClaudeSettingsPath();
 
 function readSettingsFile(): Record<string, unknown> {
   try {
@@ -32,7 +32,7 @@ export async function GET() {
   } catch (error) {
     return NextResponse.json(
       { error: "Failed to read settings" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -45,7 +45,7 @@ export async function PUT(request: Request) {
     if (!settings || typeof settings !== "object") {
       return NextResponse.json(
         { error: "Invalid settings data" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -54,7 +54,7 @@ export async function PUT(request: Request) {
   } catch (error) {
     return NextResponse.json(
       { error: "Failed to save settings" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
