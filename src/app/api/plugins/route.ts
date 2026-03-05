@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import os from "os";
 import type { ErrorResponse } from "@/types";
+import { getClaudeConfigDir } from "@/lib/cli-config";
 
 export interface SkillInfo {
   name: string;
@@ -18,8 +18,6 @@ export interface SkillsResponse {
 }
 
 function getClaudeDir(): string {
-  // Use centralized config for claude directory
-  const { getClaudeConfigDir } = require("@/lib/cli-config");
   return getClaudeConfigDir();
 }
 

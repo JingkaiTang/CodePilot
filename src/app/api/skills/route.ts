@@ -3,6 +3,11 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import crypto from "crypto";
+import {
+  getClaudeCommandsDir,
+  getClaudePluginsDir,
+  getClaudeSkillsDir,
+} from "@/lib/cli-config";
 
 interface SkillFile {
   name: string;
@@ -20,7 +25,6 @@ type InstalledSkill = SkillFile & {
 };
 
 function getGlobalCommandsDir(): string {
-  const { getClaudeCommandsDir } = require("@/lib/cli-config");
   return getClaudeCommandsDir();
 }
 
@@ -34,7 +38,6 @@ function getProjectSkillsDir(cwd?: string): string {
 
 function getPluginCommandsDirs(): string[] {
   const dirs: string[] = [];
-  const { getClaudePluginsDir } = require("@/lib/cli-config");
   const marketplacesDir = path.join(getClaudePluginsDir(), "marketplaces");
   if (!fs.existsSync(marketplacesDir)) return dirs;
 
@@ -60,11 +63,6 @@ function getPluginCommandsDirs(): string[] {
 
 function getInstalledSkillsDir(): string {
   return path.join(os.homedir(), ".agents", "skills");
-}
-
-function getClaudeSkillsDir(): string {
-  const cliConfig = require("@/lib/cli-config");
-  return cliConfig.getClaudeSkillsDir();
 }
 
 /**

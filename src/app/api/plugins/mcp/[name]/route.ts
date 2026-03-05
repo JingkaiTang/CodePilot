@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import os from "os";
 import type { MCPServerConfig, ErrorResponse, SuccessResponse } from "@/types";
+import { getClaudeSettingsPath } from "@/lib/cli-config";
 
 function getSettingsPath(): string {
-  const { getClaudeSettingsPath } = require("@/lib/cli-config");
   return getClaudeSettingsPath();
 }
 

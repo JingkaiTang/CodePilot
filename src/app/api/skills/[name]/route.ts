@@ -3,9 +3,9 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import crypto from "crypto";
+import { getClaudeCommandsDir, getClaudeSkillsDir } from "@/lib/cli-config";
 
 function getGlobalCommandsDir(): string {
-  const { getClaudeCommandsDir } = require("@/lib/cli-config");
   return getClaudeCommandsDir();
 }
 
@@ -19,11 +19,6 @@ function getProjectSkillsDir(cwd?: string): string {
 
 function getInstalledSkillsDir(): string {
   return path.join(os.homedir(), ".agents", "skills");
-}
-
-function getClaudeSkillsDir(): string {
-  const cliConfig = require("@/lib/cli-config");
-  return cliConfig.getClaudeSkillsDir();
 }
 
 type InstalledSource = "agents" | "claude";

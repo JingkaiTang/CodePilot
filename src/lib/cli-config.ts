@@ -16,7 +16,7 @@ const DEFAULT_CONFIG_DIR_NAME = ".claude";
  * Expand leading `~` or `~user` to the actual home directory.
  * Handles `~/...`, `~\...` (Windows), and bare `~`.
  */
-function expandTilde(p: string): string {
+export function expandTilde(p: string): string {
   if (p === "~") return os.homedir();
   if (p.startsWith("~/") || p.startsWith("~\\")) {
     return path.join(os.homedir(), p.slice(2));

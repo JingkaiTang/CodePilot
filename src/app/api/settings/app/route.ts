@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSetting, setSetting } from "@/lib/db";
+import { expandTilde } from "@/lib/cli-config";
 import fs from "fs";
-import path from "path";
-import os from "os";
 
 /**
  * CodePilot app-level settings (stored in SQLite, separate from ~/.claude/settings.json).
@@ -17,15 +16,6 @@ const ALLOWED_KEYS = [
   "claude_cli_path",
   "claude_config_dir",
 ];
-
-/** Expand leading `~` to the user's home directory. */
-function expandTilde(p: string): string {
-  if (p === "~") return os.homedir();
-  if (p.startsWith("~/") || p.startsWith("~\\")) {
-    return path.join(os.homedir(), p.slice(2));
-  }
-  return p;
-}
 
 export async function GET() {
   try {

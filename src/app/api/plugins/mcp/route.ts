@@ -1,22 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import os from "os";
 import type {
   MCPServerConfig,
   MCPConfigResponse,
   ErrorResponse,
   SuccessResponse,
 } from "@/types";
+import {
+  getClaudeSettingsPath,
+  getClaudeUserConfigPath,
+} from "@/lib/cli-config";
 
 function getSettingsPath(): string {
-  const { getClaudeSettingsPath } = require("@/lib/cli-config");
   return getClaudeSettingsPath();
 }
 
 // User-level config file (e.g. ~/.claude.json or ~/.claude-internal.json)
 function getUserConfigPath(): string {
-  const { getClaudeUserConfigPath } = require("@/lib/cli-config");
   return getClaudeUserConfigPath();
 }
 

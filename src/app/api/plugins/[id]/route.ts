@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import os from "os";
 import type { PluginInfo, ErrorResponse, SuccessResponse } from "@/types";
+import { getClaudeConfigDir } from "@/lib/cli-config";
 
 function getClaudeDir(): string {
-  const { getClaudeConfigDir } = require("@/lib/cli-config");
   return getClaudeConfigDir();
 }
 
